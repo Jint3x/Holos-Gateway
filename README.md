@@ -63,3 +63,23 @@ in Swagger UI without adding a simulated-failure endpoint.
 ```sh
 uv run --locked pytest
 ```
+
+## Lint and format
+
+Ruff checks Python code, sorts imports, and formats the project. Run the same
+checks used by CI:
+
+```sh
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+```
+
+To apply safe lint fixes and format code locally:
+
+```sh
+uv run --locked ruff check --fix .
+uv run --locked ruff format .
+```
+
+Review the resulting diff before committing. Ruff targets Python 3.14 and uses
+an 88-character line length. Preview rules and unsafe fixes are not enabled.

@@ -17,8 +17,14 @@ def main() -> None:
     args = parser.parse_args()
     schema = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     if args.check:
-        if not SCHEMA_PATH.exists() or SCHEMA_PATH.read_text(encoding="utf-8") != schema:
-            parser.exit(1, "OpenAPI schema is stale. Run: uv run python -m scripts.export_openapi\n")
+        if (
+            not SCHEMA_PATH.exists()
+            or SCHEMA_PATH.read_text(encoding="utf-8") != schema
+        ):
+            parser.exit(
+                1,
+                "OpenAPI schema is stale. Run: uv run python -m scripts.export_openapi\n",
+            )
         print("OpenAPI schema is up to date.")
     else:
         SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True)

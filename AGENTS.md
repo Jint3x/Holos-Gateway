@@ -13,6 +13,20 @@ respect `.python-version` and `pyproject.toml`.
 - Do not introduce pip, Poetry, or a separate requirements file as an alternative
   dependency workflow.
 
+## Linting and formatting
+
+Use Ruff for linting, import sorting, and formatting. Before committing Python
+changes, run these checks from the repository root:
+
+```sh
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+```
+
+Use `uv run --locked ruff check --fix .` for safe lint fixes and
+`uv run --locked ruff format .` to format code. Review automatic changes; do not
+enable unsafe fixes or disable rules just to make a check pass.
+
 ## API schemas
 
 Always create or update the OpenAPI schema when adding or changing an endpoint.
