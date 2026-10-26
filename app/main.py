@@ -28,7 +28,7 @@ class ErrorResponse(BaseModel):
     summary="Return a greeting",
     description=(
         "Returns Hello World by default, or a personalized greeting when name is "
-        "provided. Names must contain 1–80 characters before trimming and cannot "
+        "provided. Names must contain 1-80 characters before trimming and cannot "
         "consist entirely of whitespace."
     ),
     responses={

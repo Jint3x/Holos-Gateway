@@ -99,7 +99,7 @@
   "paths": {
     "/": {
       "get": {
-        "description": "Returns Hello World by default, or a personalized greeting when name is provided. Names must contain 1\u201380 characters before trimming and cannot consist entirely of whitespace.",
+        "description": "Returns Hello World by default, or a personalized greeting when name is provided. Names must contain 1-80 characters before trimming and cannot consist entirely of whitespace.",
         "operationId": "hello_world__get",
         "parameters": [
           {
