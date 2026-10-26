@@ -17,4 +17,5 @@ jobs:
           version: "0.12.23"
       - run: uv python install 3.14
       - run: uv sync --locked
+      - run: uv run --locked python -m scripts.export_openapi --check
       - run: uv run --locked pytest
