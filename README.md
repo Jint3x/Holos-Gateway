@@ -14,7 +14,7 @@ uv sync --locked
 ## Run
 
 ```sh
-uv run --locked uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv run --locked uvicorn app.main:create_app --factory --no-access-log --host 0.0.0.0 --port 8000 --reload
 ```
 
 `GET /` returns HTTP 200 with:
@@ -83,3 +83,16 @@ uv run --locked ruff format .
 
 Review the resulting diff before committing. Ruff targets Python 3.14 and uses
 an 88-character line length. Preview rules and unsafe fixes are not enabled.
+
+## Observability
+
+Logs, metrics, and traces use OpenTelemetry with OTLP HTTP/protobuf export to
+Grafana. The container supplies the endpoint and authentication through runtime
+environment variables; no credentials are stored in the repository. The default
+service name is `holos-api-gateway`. Without an endpoint, the service runs with
+JSON console logs and no remote export.
+
+See [observability configuration and operations](docs/observability.md) for the
+standard `OTEL_*` variables, the `otlp_endpoint`/`otlp_key` container bindings,
+sampling, privacy controls, and verification. Use the factory command above;
+providers are drained and shut down with the application lifespan.

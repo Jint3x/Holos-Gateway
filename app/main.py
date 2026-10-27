@@ -1,13 +1,35 @@
+from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-app = FastAPI(
-    title="Holos Gateway",
-    version="0.1.0",
-    description="The public API for Holos Gateway.",
-)
+from app.observability import Telemetry, TelemetrySettings
+
+router = APIRouter()
+
+
+def create_app(*, telemetry: Telemetry | None = None) -> FastAPI:
+    telemetry = telemetry or Telemetry(TelemetrySettings.from_env())
+
+    @asynccontextmanager
+    async def lifespan(app):
+        telemetry.start_logging()
+        try:
+            yield
+        finally:
+            telemetry.shutdown()
+
+    app = FastAPI(
+        title="Holos Gateway",
+        version="0.1.0",
+        description="The public API for Holos Gateway.",
+        lifespan=lifespan,
+    )
+    app.include_router(router)
+    app.state.telemetry = telemetry
+    telemetry.instrument(app)
+    return app
 
 
 class GreetingResponse(BaseModel):
@@ -21,7 +43,7 @@ class ErrorResponse(BaseModel):
     )
 
 
-@app.get(
+@router.get(
     "/",
     response_model=GreetingResponse,
     tags=["Greetings"],
