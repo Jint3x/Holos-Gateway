@@ -97,3 +97,34 @@ under `tests/`, name files `test_*.py`, and use descriptive `test_*` functions.
   successful and error responses. Keep OpenAPI contract coverage current.
 - Add tests when they protect meaningful behavior; avoid tests that merely
   duplicate implementation details or assertions with no useful failure mode.
+
+## Observability
+
+Use the OpenTelemetry Python SDK and FastAPI instrumentation for traces and
+metrics, and standard Python logging under `holos.*` for correlated JSON/OTLP
+logs. Export all three signals through OTLP HTTP/protobuf to the configured
+Grafana endpoint. See `docs/observability.md` for configuration and operation.
+
+Every new endpoint, background job, integration, or meaningful business operation
+must include appropriate production-ready logs, traces, and metrics as part of
+its implementation. Reuse automatic HTTP instrumentation; avoid duplicate spans,
+request counters, and noisy per-step logs. Add stable business spans/events and
+metrics where they explain behavior, failures, or performance.
+
+- Read credentials only from the runtime/container environment. Never commit,
+  log, or embed secrets, payloads, cookies, authorization headers, query values,
+  or raw exception text in telemetry. Do not disable TLS verification.
+- Keep metric dimensions bounded: use route templates, methods, status codes,
+  and reviewed categories. Never use user IDs, request/trace IDs, arbitrary URLs,
+  or exception messages as metric labels.
+- Obtain custom tracers/meters from `app.state.telemetry` providers rather than
+  process-global providers. Propagate trace context across supported boundaries
+  and correlate application logs with the active span.
+- Preserve background batching, bounded export queues/timeouts, and graceful
+  provider shutdown. A telemetry backend outage must not fail API requests.
+- Test successful and failing operations, useful telemetry, correlation, and
+  privacy with isolated in-memory exporters or the local OTLP receiver. Unit
+  tests must never send telemetry to Grafana or use real credentials.
+- Start Uvicorn with `--no-access-log` to avoid duplicate raw request/query logs.
+  Use `app.main:create_app --factory`; do not add zero-code instrumentation on
+  top of the application's explicit SDK initialization.
