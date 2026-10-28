@@ -1,0 +1,346 @@
+rule_files:
+  -
+    "recording-rules.yml"
+  -
+    "alerts.yml"
+evaluation_interval: "30s"
+fuzzy_compare: true
+tests:
+  -
+    name: "aggregate counters before ratios and buckets before percentiles"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-b\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-b\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\"}"
+        values: "0+120x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"400\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"500\"}"
+        values: "0+6x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\",le=\"0.5\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\",le=\"1\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\",le=\"+Inf\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-b\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\",le=\"0.5\"}"
+        values: "0+0x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-b\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\",le=\"1\"}"
+        values: "0+120x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-b\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\",le=\"+Inf\"}"
+        values: "0+120x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"400\",le=\"0.5\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"400\",le=\"1\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"400\",le=\"+Inf\"}"
+        values: "0+60x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"500\",le=\"0.5\"}"
+        values: "0+6x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"500\",le=\"1\"}"
+        values: "0+6x20"
+      -
+        series: "http_server_request_duration_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"500\",le=\"+Inf\"}"
+        values: "0+6x20"
+      -
+        series: "process_cpu_time_seconds_total{job=\"holos-api-gateway\",instance=\"worker-a\",cpu_mode=\"user\"}"
+        values: "0+30x20"
+      -
+        series: "process_cpu_time_seconds_total{job=\"holos-api-gateway\",instance=\"worker-a\",cpu_mode=\"system\"}"
+        values: "0+15x20"
+    promql_expr_test:
+      -
+        expr: "sum(holos:http_requests:rate5m)"
+        eval_time: "10m"
+        exp_samples:
+          -
+            labels: "{}"
+            value: 4.1
+      -
+        expr: "(sum(holos:http_requests:rate5m{http_response_status_code=~\"[23]..\"}) or (0 * sum(holos:http_requests:rate5m))) / (sum(holos:http_requests:rate5m) > 0)"
+        eval_time: "10m"
+        exp_samples:
+          -
+            labels: "{}"
+            value: 0.7317073170731708
+      -
+        expr: "histogram_quantile(0.95, sum by (le) (holos:http_duration_bucket:rate5m))"
+        eval_time: "10m"
+        exp_samples:
+          -
+            labels: "{}"
+            value: 0.94875
+      -
+        expr: "sum(holos:process_cpu:cores5m)"
+        eval_time: "10m"
+        exp_samples:
+          -
+            labels: "{}"
+            value: 0.75
+    alert_rule_test:
+      -
+        eval_time: "15m"
+        alertname: "HolosHighServerErrorRate"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-api-gateway"
+              deployment_environment_name: "production"
+              severity: "critical"
+            exp_annotations:
+              summary: "Server failures exceed 1%"
+              description: "Check 5xx status codes and correlated traces. Inspect recent deployments; 4xx responses do not trigger this alert."
+      -
+        eval_time: "15m"
+        alertname: "HolosHighLatency"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-api-gateway"
+              deployment_environment_name: "production"
+              severity: "warning"
+            exp_annotations:
+              summary: "p95 response time exceeds 500 ms"
+              description: "Compare traffic, CPU cores, event loop delay, and thread-pool waiting work. Tune the threshold after establishing a baseline."
+  -
+    name: "4xx responses do not count as server failures"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"422\"}"
+        values: "0+120x20"
+    alert_rule_test:
+      -
+        eval_time: "15m"
+        alertname: "HolosHighServerErrorRate"
+        exp_alerts: []
+    promql_expr_test:
+      -
+        expr: "(sum(holos:http_requests:rate5m{http_response_status_code=~\"[23]..\"}) or (0 * sum(holos:http_requests:rate5m))) / (sum(holos:http_requests:rate5m) > 0)"
+        eval_time: "10m"
+        exp_samples:
+          -
+            labels: "{}"
+            value: 0
+  -
+    name: "low traffic does not trigger percentage based alerts"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"500\"}"
+        values: "0+1x20"
+    alert_rule_test:
+      -
+        eval_time: "15m"
+        alertname: "HolosHighServerErrorRate"
+        exp_alerts: []
+  -
+    name: "idle service does not report 100 percent success"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\"}"
+        values: "0+0x20"
+    promql_expr_test:
+      -
+        expr: "(sum(holos:http_requests:rate5m{http_response_status_code=~\"[23]..\"}) or (0 * sum(holos:http_requests:rate5m))) / (sum(holos:http_requests:rate5m) > 0)"
+        eval_time: "10m"
+        exp_samples: []
+  -
+    name: "counter reset does not produce a negative request rate"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"200\"}"
+        values: "0+60x5 0+120x14"
+    promql_expr_test:
+      -
+        expr: "sum(holos:http_requests:rate5m)"
+        eval_time: "15m"
+        exp_samples:
+          -
+            labels: "{}"
+            value: 2
+  -
+    name: "freshness uses raw sample time despite Prometheus five minute lookback"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "holos_telemetry_heartbeat{job=\"holos-api-gateway\",instance=\"worker-a\"}"
+        values: "1 1 1 _ _ _ _ _ _ _"
+    alert_rule_test:
+      -
+        eval_time: "4m"
+        alertname: "HolosTelemetryMissing"
+        exp_alerts: []
+      -
+        eval_time: "6m"
+        alertname: "HolosTelemetryMissing"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-api-gateway"
+              deployment_environment_name: "production"
+              severity: "critical"
+            exp_annotations:
+              summary: "No production telemetry has arrived for three minutes"
+              description: "Check application availability, OTLP export errors, authentication, network access, and recording-rule health. This checks the service as a whole, not expected replica counts."
+  -
+    name: "missing production telemetry and probe are visible"
+    interval: "1m"
+    input_series: []
+    alert_rule_test:
+      -
+        eval_time: "6m"
+        alertname: "HolosTelemetryMissing"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-api-gateway"
+              deployment_environment_name: "production"
+              severity: "critical"
+            exp_annotations:
+              summary: "No production telemetry has arrived for three minutes"
+              description: "Check application availability, OTLP export errors, authentication, network access, and recording-rule health. This checks the service as a whole, not expected replica counts."
+      -
+        eval_time: "6m"
+        alertname: "HolosExternalProbeMissing"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-gateway-production"
+              severity: "warning"
+            exp_annotations:
+              summary: "External availability check results are missing"
+              description: "Confirm the independent HTTP check is configured and running. Missing probe data is distinct from a failed probe."
+  -
+    name: "independent probe failure requires sustained failure"
+    interval: "1m"
+    input_series:
+      -
+        series: "probe_success{job=\"holos-gateway-production\",instance=\"https://example.test/healthz\",probe=\"test\"}"
+        values: "1 0 0 0 0 0"
+    alert_rule_test:
+      -
+        eval_time: "2m"
+        alertname: "HolosExternalProbeFailed"
+        exp_alerts: []
+      -
+        eval_time: "3m"
+        alertname: "HolosExternalProbeFailed"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-gateway-production"
+              instance: "https://example.test/healthz"
+              probe: "test"
+              severity: "critical"
+            exp_annotations:
+              summary: "External availability check is failing"
+              description: "With one-minute checks, investigate after three consecutive failed probes. Check DNS, TLS, ingress, and the application; this is independent of application telemetry."
+  -
+    name: "development errors cannot trigger production alerts"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"development\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "http_server_request_duration_seconds_count{job=\"holos-api-gateway\",instance=\"worker-a\",http_route=\"/\",http_request_method=\"GET\",http_response_status_code=\"500\"}"
+        values: "0+120x20"
+    alert_rule_test:
+      -
+        eval_time: "15m"
+        alertname: "HolosHighServerErrorRate"
+        exp_alerts: []
+  -
+    name: "sustained worker saturation alerts"
+    interval: "1m"
+    input_series:
+      -
+        series: "target_info{job=\"holos-api-gateway\",instance=\"worker-a\",deployment_environment_name=\"production\",service_version=\"v1\"}"
+        values: "1+0x20"
+      -
+        series: "holos_runtime_thread_pool_busy{job=\"holos-api-gateway\",instance=\"worker-a\"}"
+        values: "40+0x20"
+      -
+        series: "holos_runtime_thread_pool_capacity{job=\"holos-api-gateway\",instance=\"worker-a\"}"
+        values: "40+0x20"
+      -
+        series: "holos_runtime_thread_pool_waiting{job=\"holos-api-gateway\",instance=\"worker-a\"}"
+        values: "2+0x20"
+      -
+        series: "holos_runtime_event_loop_delay_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",le=\"0.1\"}"
+        values: "0+0x20"
+      -
+        series: "holos_runtime_event_loop_delay_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",le=\"0.5\"}"
+        values: "0+60x20"
+      -
+        series: "holos_runtime_event_loop_delay_seconds_bucket{job=\"holos-api-gateway\",instance=\"worker-a\",le=\"+Inf\"}"
+        values: "0+60x20"
+    alert_rule_test:
+      -
+        eval_time: "10m"
+        alertname: "HolosThreadPoolSaturated"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-api-gateway"
+              deployment_environment_name: "production"
+              severity: "warning"
+              instance: "worker-a"
+              service_version: "v1"
+            exp_annotations:
+              summary: "Worker thread pool has sustained waiting work"
+              description: "Inspect slow synchronous operations and traffic before adjusting concurrency. A larger pool can increase downstream load."
+      -
+        eval_time: "10m"
+        alertname: "HolosEventLoopBlocked"
+        exp_alerts:
+          -
+            exp_labels:
+              job: "holos-api-gateway"
+              deployment_environment_name: "production"
+              severity: "warning"
+              instance: "worker-a"
+              service_version: "v1"
+            exp_annotations:
+              summary: "Worker event loop delay exceeds 100 ms"
+              description: "Look for blocking work on the event loop or CPU throttling. Move blocking I/O into the thread pool and inspect worker resource allocation."

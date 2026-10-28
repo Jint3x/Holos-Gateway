@@ -25,6 +25,7 @@ The application does not read `.env` files automatically.
 | `OTEL_RESOURCE_ATTRIBUTES` | Standard SDK resource attributes; use `deployment.environment.name=production` to identify the deployment. Never put secrets here. |
 | `OTEL_TRACES_SAMPLER` | Standard SDK trace sampler, default `parentbased_always_on`. For production volume control, consider `parentbased_traceidratio`. |
 | `OTEL_TRACES_SAMPLER_ARG` | Root trace sampling fraction for the ratio sampler, for example `0.1` for 10%. Incoming parent sampling decisions are respected. |
+| `OTEL_METRIC_EXPORT_INTERVAL` | Background metric export interval in milliseconds; default `30000`, supported range `1000`-`60000`. |
 
 Use either the standard endpoint/header variables **or** the lowercase container
 variables; the standard variables take precedence independently. The lowercase
@@ -71,13 +72,12 @@ application's `holos.*` logs.
   status descriptions. Unmatched requests use the span name `METHOD unmatched`.
 - **Metrics:** FastAPI's request duration histogram (whose count also supplies
   request volume), active requests, request/response sizes where supported by the
-  instrumentation, and `holos.http.server.errors` for responses >= 400. Status
-  codes distinguish client errors from server failures. The instrumentation's
-  default HTTP semantic conventions use `http.server.duration` in milliseconds;
-  stable HTTP conventions, when opted into through standard SDK configuration,
-  use `http.server.request.duration` in seconds. Do not mix their units in dashboards.
-  Metric views retain only vetted HTTP method, route, status, and error labels;
-  legacy `http.target` labels contain route templates, never request URLs.
+  instrumentation. Status codes distinguish successful responses, client errors,
+  and server failures in the same histogram. The application enforces stable
+  HTTP conventions: `http.server.request.duration` in seconds. Health probes
+  and API documentation are excluded from
+  automatic HTTP metrics/spans, including requests with query parameters.
+  Metric views retain only vetted HTTP method, route, status, and error labels.
 - **Logs:** one structured JSON event for each completed request, including
   duration, route template, status, and trace/span IDs. Requests >= 400 log at
   WARNING, and >= 500 at ERROR. Unexpected exceptions include the type, not the
@@ -85,9 +85,18 @@ application's `holos.*` logs.
   console and to OTLP with native trace correlation. Console logs go to stderr.
 
 Resources include the service name, version, and a unique instance ID per worker.
+Set `deployment.environment.name` and `service.version` with
+`OTEL_RESOURCE_ATTRIBUTES`; they default to `development` and `0.1.0`.
 Sampling controls traces, not aggregate request metrics or the application log
 threshold. Avoid ingesting both OTLP logs and container stderr into the same
 Loki stream unless duplicate ingestion is explicitly desired.
+
+Worker CPU, physical memory, open file descriptors (where supported), uptime,
+event loop delay, default AnyIO thread-pool usage/waiting work, and an idle
+heartbeat supplement the HTTP metrics. Collection uses application-scoped meters
+and a lifespan-managed scheduler task. See [production monitoring](../monitoring/README.md)
+for the complete catalog, Grafana dashboard, tested alert rules, setup, and the
+hosting-specific infrastructure measurements still needed at deployment.
 
 ## Adding application behavior
 
@@ -100,9 +109,9 @@ For custom spans, obtain a tracer from
 `request.app.state.telemetry.traces.get_tracer(__name__)`; for business metrics,
 use `request.app.state.telemetry.metrics.get_meter(__name__)`. Providers are
 application-scoped, not installed as process-global SDK providers. Give operations
-stable names and add only reviewed low-cardinality attributes. The current metric
-view drops custom attributes; deliberately extend the allowlist with tests if a
-business metric requires additional labels. Instrument outgoing HTTP/database
+stable names and add only reviewed low-cardinality attributes. Add an
+instrument-specific view with an attribute allowlist and privacy tests whenever
+introducing a new metric family. Instrument outgoing HTTP/database
 clients when those dependencies are introduced, rather than adding them now.
 
 ## Verification

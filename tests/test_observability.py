@@ -1,5 +1,8 @@
 import json
 import logging
+import os
+import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -160,27 +163,30 @@ def test_traces_metrics_logs_and_redaction(capsys):
     assert "unmatched" in span_text
 
     metric_text = repr(snapshot)
-    points = [
-        point
+    histograms = [
+        metric
         for resource in snapshot.resource_metrics
         for scope in resource.scope_metrics
         for metric in scope.metrics
-        if metric.name == "holos.http.server.errors"
-        for point in metric.data.data_points
+        if metric.name == "http.server.request.duration"
     ]
-    assert sum(point.value for point in points) == 4
+    assert len(histograms) == 1
+    assert histograms[0].unit == "s"
+    points = histograms[0].data.data_points
+    assert sum(point.count for point in points) == 5
     assert {point.attributes["http.response.status_code"] for point in points} == {
+        200,
         400,
         422,
         404,
         500,
     }
-    assert any(
-        metric.name in {"http.server.duration", "http.server.request.duration"}
+    assert not {
+        metric.name
         for resource in snapshot.resource_metrics
         for scope in resource.scope_metrics
         for metric in scope.metrics
-    )
+    } & {"http.server.duration", "holos.http.server.errors"}
 
     records = logs.get_finished_logs()
     requests = [
@@ -202,6 +208,50 @@ def test_traces_metrics_logs_and_redaction(capsys):
         "private-exception-value",
     ):
         assert secret not in span_text + metric_text + output + repr(records)
+
+
+@pytest.mark.parametrize("conventions", ["", "http/dup"])
+def test_startup_uses_only_stable_http_metrics(conventions):
+    # SDK convention selection is process-wide; exercise real cold startup.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+from fastapi.testclient import TestClient
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from app.main import create_app
+from app.observability import Telemetry, TelemetrySettings
+reader = InMemoryMetricReader()
+telemetry = Telemetry(TelemetrySettings(), metric_readers=[reader])
+with TestClient(create_app(telemetry=telemetry)) as client:
+    assert client.get('/').status_code == 200
+    snapshot = reader.get_metrics_data()
+    print(json.dumps([
+        {'name': metric.name, 'unit': metric.unit,
+         'attributes': [dict(point.attributes) for point in metric.data.data_points]}
+        for resource in snapshot.resource_metrics
+        for scope in resource.scope_metrics
+        for metric in scope.metrics
+    ]))
+""",
+        ],
+        env={**os.environ, "OTEL_SEMCONV_STABILITY_OPT_IN": conventions},
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=15,
+    )
+    metrics = json.loads(result.stdout)
+    names = {metric["name"] for metric in metrics}
+    assert "http.server.request.duration" in names
+    assert not names & {"http.server.duration", "holos.http.server.errors"}
+    assert all(
+        not attributes.keys() & {"http.method", "http.target", "http.status_code"}
+        for metric in metrics
+        for attributes in metric["attributes"]
+    )
 
 
 def test_exporter_failure_does_not_fail_requests():

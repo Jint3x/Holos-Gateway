@@ -96,3 +96,10 @@ See [observability configuration and operations](docs/observability.md) for the
 standard `OTEL_*` variables, the `otlp_endpoint`/`otlp_key` container bindings,
 sampling, privacy controls, and verification. Use the factory command above;
 providers are drained and shut down with the application lifespan.
+
+Worker resource and saturation metrics, an importable Grafana dashboard, and
+tested alert definitions are included. See [production monitoring](monitoring/README.md)
+for setup and interpretation. `GET /healthz` reports liveness; `GET /readyz`
+returns 200 after initialization and 503 when not ready. Telemetry backend
+availability does not affect readiness. Health probes and API documentation do
+not inflate user request metrics.

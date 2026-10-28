@@ -1,0 +1,47 @@
+# Prometheus/Mimir ruler format. Load before dashboard and alerts.
+groups:
+  - name: holos-recordings
+    interval: 30s
+    rules:
+      - record: holos:http_requests:rate5m
+        expr: >-
+          sum by (job, deployment_environment_name, service_version, instance, http_route, http_request_method, http_response_status_code) (rate(http_server_request_duration_seconds_count{job="holos-api-gateway"}[5m]) * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:http_requests:increase5m
+        expr: >-
+          sum by (job, deployment_environment_name, service_version, instance, http_route, http_request_method, http_response_status_code) (increase(http_server_request_duration_seconds_count{job="holos-api-gateway"}[5m]) * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:http_duration_bucket:rate5m
+        expr: >-
+          sum by (job, deployment_environment_name, service_version, instance, http_route, http_request_method, http_response_status_code, le) (rate(http_server_request_duration_seconds_bucket{job="holos-api-gateway"}[5m]) * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:process_cpu:cores5m
+        expr: >-
+          sum by (job, deployment_environment_name, service_version, instance) (rate(process_cpu_time_seconds_total{job="holos-api-gateway"}[5m]) * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:process_memory:bytes
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (process_memory_usage_bytes{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:event_loop_delay_bucket:rate5m
+        expr: >-
+          sum by (job, deployment_environment_name, service_version, instance, le) (rate(holos_runtime_event_loop_delay_seconds_bucket{job="holos-api-gateway"}[5m]) * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:active_requests
+        expr: >-
+          sum by (job, deployment_environment_name, service_version, instance) (http_server_active_requests{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:thread_pool_busy
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (holos_runtime_thread_pool_busy{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:thread_pool_capacity
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (holos_runtime_thread_pool_capacity{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:thread_pool_waiting
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (holos_runtime_thread_pool_waiting{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:open_file_descriptors
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (process_open_file_descriptor_count{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:worker_uptime:seconds
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (holos_runtime_uptime_seconds{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:telemetry_heartbeat
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (holos_telemetry_heartbeat{job="holos-api-gateway"} * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
+      - record: holos:telemetry_last_seen:seconds
+        expr: >-
+          max by (job, deployment_environment_name, service_version, instance) (timestamp(holos_telemetry_heartbeat{job="holos-api-gateway"}) * on (job, instance) group_left (deployment_environment_name, service_version) target_info{job="holos-api-gateway"})
