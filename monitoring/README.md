@@ -13,11 +13,10 @@ These files do not activate monitoring or notification channels by themselves.
    ```sh
    OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production,service.version=YOUR_RELEASE
    OTEL_METRIC_EXPORT_INTERVAL=30000
-   OTEL_SEMCONV_STABILITY_OPT_IN=http
    ```
 
-   The application defaults to stable HTTP conventions, a 30-second export
-   interval, service `holos-api-gateway`, environment `development`, and version
+   The application enforces stable HTTP conventions in seconds. It defaults to
+   a 30-second export interval, service `holos-api-gateway`, environment `development`, and version
    `0.1.0`. Set the environment and version explicitly for production. Resource
    attributes identify deployments; never put secrets or user information in them.
    The worker instance ID is generated independently for each worker.
@@ -94,10 +93,8 @@ production credentials, external probes, or notification delivery.
 
 Health probes, `/docs`, `/redoc`, and `/openapi.json` are excluded from automatic
 HTTP metrics and spans, including requests with query parameters. They still
-produce the existing safe request logs. The compatibility error counter
-`holos.http.server.errors` still includes all responses >= 400, including health
-failures; dashboard rates use the HTTP histogram consistently for numerator and
-denominator. Unmatched request paths never become metric labels.
+produce safe request logs. Dashboard rates use the HTTP histogram consistently
+for numerator and denominator. Unmatched request paths never become metric labels.
 
 ## Metrics and collection
 

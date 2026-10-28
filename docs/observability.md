@@ -26,7 +26,6 @@ The application does not read `.env` files automatically.
 | `OTEL_TRACES_SAMPLER` | Standard SDK trace sampler, default `parentbased_always_on`. For production volume control, consider `parentbased_traceidratio`. |
 | `OTEL_TRACES_SAMPLER_ARG` | Root trace sampling fraction for the ratio sampler, for example `0.1` for 10%. Incoming parent sampling decisions are respected. |
 | `OTEL_METRIC_EXPORT_INTERVAL` | Background metric export interval in milliseconds; default `30000`, supported range `1000`-`60000`. |
-| `OTEL_SEMCONV_STABILITY_OPT_IN` | Defaults to `http` before instrumentation initializes, selecting stable HTTP metrics in seconds. Set explicitly before startup when embedding in an already-instrumented process. |
 
 Use either the standard endpoint/header variables **or** the lowercase container
 variables; the standard variables take precedence independently. The lowercase
@@ -73,16 +72,12 @@ application's `holos.*` logs.
   status descriptions. Unmatched requests use the span name `METHOD unmatched`.
 - **Metrics:** FastAPI's request duration histogram (whose count also supplies
   request volume), active requests, request/response sizes where supported by the
-  instrumentation, and `holos.http.server.errors` for responses >= 400. Status
-  codes distinguish client errors from server failures. The instrumentation's
-  application defaults to stable HTTP conventions:
-  `http.server.request.duration` in seconds. The dashboard and recording rules
-  require this convention. Explicit legacy/dual opt-in is only for migration;
-  legacy `http.server.duration` uses milliseconds and must not be mixed with
-  the stable histogram. Health probes and API documentation are excluded from
+  instrumentation. Status codes distinguish successful responses, client errors,
+  and server failures in the same histogram. The application enforces stable
+  HTTP conventions: `http.server.request.duration` in seconds. Health probes
+  and API documentation are excluded from
   automatic HTTP metrics/spans, including requests with query parameters.
-  Metric views retain only vetted HTTP method, route, status, and error labels;
-  legacy `http.target` labels contain route templates, never request URLs.
+  Metric views retain only vetted HTTP method, route, status, and error labels.
 - **Logs:** one structured JSON event for each completed request, including
   duration, route template, status, and trace/span IDs. Requests >= 400 log at
   WARNING, and >= 500 at ERROR. Unexpected exceptions include the type, not the

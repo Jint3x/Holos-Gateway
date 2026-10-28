@@ -29,11 +29,8 @@ from opentelemetry.trace import SpanKind, Status
 from app.runtime_metrics import RuntimeMetrics
 
 METRIC_ATTRIBUTES = {
-    "http.method",
     "http.request.method",
     "http.route",
-    "http.target",
-    "http.status_code",
     "http.response.status_code",
     "error.type",
 }
@@ -179,13 +176,9 @@ class SafeSpanExporter(SpanExporter):
                     )
                 )
             }
-            # Only a route template is safe; a request target can contain user input.
-            attributes.pop("http.target", None)
             name = span.name
             if span.kind == SpanKind.SERVER:
-                method = attributes.get(
-                    "http.request.method", attributes.get("http.method", "HTTP")
-                )
+                method = attributes.get("http.request.method", "HTTP")
                 name = f"{method} {attributes.get('http.route', 'unmatched')}"
             events = [
                 Event(
@@ -269,23 +262,17 @@ class Telemetry:
             shutdown_on_exit=False,
             views=[
                 View(instrument_name="http.*", attribute_keys=METRIC_ATTRIBUTES),
-                View(instrument_name="holos.http.*", attribute_keys=METRIC_ATTRIBUTES),
                 View(instrument_name="process.*", attribute_keys={"cpu.mode"}),
                 View(instrument_name="holos.runtime.*", attribute_keys=set()),
                 View(instrument_name="holos.telemetry.*", attribute_keys=set()),
             ],
         )
         self.runtime = RuntimeMetrics(self.metrics.get_meter("holos.runtime"))
-        self.errors = self.metrics.get_meter("holos.http").create_counter(
-            "holos.http.server.errors",
-            unit="{request}",
-            description="HTTP responses with status >= 400",
-        )
         self.handlers = []
         self.closed = False
 
     def instrument(self, app):
-        app.add_middleware(RequestLoggingMiddleware, telemetry=self)
+        app.add_middleware(RequestLoggingMiddleware)
         FastAPIInstrumentor.instrument_app(
             app,
             tracer_provider=self.traces,
@@ -334,9 +321,8 @@ class Telemetry:
 
 
 class RequestLoggingMiddleware:
-    def __init__(self, app, telemetry):
+    def __init__(self, app):
         self.app = app
-        self.telemetry = telemetry
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -370,13 +356,6 @@ class RequestLoggingMiddleware:
                 "CONNECT",
             }:
                 method = "_OTHER"
-            attributes = {
-                "http.route": route,
-                "http.request.method": method,
-                "http.response.status_code": status,
-            }
-            if status >= 400:
-                self.telemetry.errors.add(1, attributes)
             fields = {
                 "http_method": method,
                 "http_route": route,
