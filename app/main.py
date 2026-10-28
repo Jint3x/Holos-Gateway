@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from app.observability import Telemetry, TelemetrySettings
@@ -16,7 +16,12 @@ def create_app(*, telemetry: Telemetry | None = None) -> FastAPI:
     async def lifespan(app):
         telemetry.start_logging()
         try:
-            yield
+            async with telemetry.runtime.monitor():
+                app.state.ready = True
+                try:
+                    yield
+                finally:
+                    app.state.ready = False
         finally:
             telemetry.shutdown()
 
@@ -28,6 +33,7 @@ def create_app(*, telemetry: Telemetry | None = None) -> FastAPI:
     )
     app.include_router(router)
     app.state.telemetry = telemetry
+    app.state.ready = False
     telemetry.instrument(app)
     return app
 
@@ -41,6 +47,39 @@ class ErrorResponse(BaseModel):
         description="A human-readable explanation of the error.",
         examples=["Name must contain a non-whitespace character."],
     )
+
+
+class HealthResponse(BaseModel):
+    status: str = Field(description="Worker health state.", examples=["ok"])
+
+
+@router.get(
+    "/healthz",
+    response_model=HealthResponse,
+    tags=["Health"],
+    summary="Check worker liveness",
+    description="A successful response confirms the worker can serve HTTP requests.",
+)
+async def health() -> HealthResponse:
+    return HealthResponse(status="ok")
+
+
+@router.get(
+    "/readyz",
+    response_model=HealthResponse,
+    tags=["Health"],
+    summary="Check worker readiness",
+    description=(
+        "Returns ready after initialization and before shutdown. Telemetry backend "
+        "availability does not affect readiness."
+    ),
+    responses={503: {"model": HealthResponse, "description": "Worker is not ready."}},
+)
+async def ready(request: Request, response: Response) -> HealthResponse:
+    if not request.app.state.ready:
+        response.status_code = 503
+        return HealthResponse(status="not_ready")
+    return HealthResponse(status="ready")
 
 
 @router.get(

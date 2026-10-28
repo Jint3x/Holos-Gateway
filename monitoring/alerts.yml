@@ -1,0 +1,69 @@
+# Defaults target production. Adapt job/environment before enabling.
+# Load recording-rules.yml in the same ruler and configure notifications separately.
+groups:
+  - name: holos-alerts
+    interval: 30s
+    rules:
+      - alert: HolosHighServerErrorRate
+        expr: >-
+          (sum by (job, deployment_environment_name) (holos:http_requests:rate5m{job="holos-api-gateway",deployment_environment_name="production",http_response_status_code=~"5.."}) / sum by (job, deployment_environment_name) (holos:http_requests:rate5m{job="holos-api-gateway",deployment_environment_name="production"}) > 0.01) and (sum by (job, deployment_environment_name) (holos:http_requests:increase5m{job="holos-api-gateway",deployment_environment_name="production"}) >= 100)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Server failures exceed 1%"
+          description: "Check 5xx status codes and correlated traces. Inspect recent deployments; 4xx responses do not trigger this alert."
+      - alert: HolosHighLatency
+        expr: >-
+          (histogram_quantile(0.95, sum by (job, deployment_environment_name, le) (holos:http_duration_bucket:rate5m{job="holos-api-gateway",deployment_environment_name="production"})) > 0.5) and (sum by (job, deployment_environment_name) (holos:http_requests:increase5m{job="holos-api-gateway",deployment_environment_name="production"}) >= 100)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 response time exceeds 500 ms"
+          description: "Compare traffic, CPU cores, event loop delay, and thread-pool waiting work. Tune the threshold after establishing a baseline."
+      - alert: HolosEventLoopBlocked
+        expr: >-
+          histogram_quantile(0.95, sum by (job, deployment_environment_name, service_version, instance, le) (holos:event_loop_delay_bucket:rate5m{job="holos-api-gateway",deployment_environment_name="production"})) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker event loop delay exceeds 100 ms"
+          description: "Look for blocking work on the event loop or CPU throttling. Move blocking I/O into the thread pool and inspect worker resource allocation."
+      - alert: HolosThreadPoolSaturated
+        expr: >-
+          (holos:thread_pool_waiting{job="holos-api-gateway",deployment_environment_name="production"} > 0) and (holos:thread_pool_busy{job="holos-api-gateway",deployment_environment_name="production"} / holos:thread_pool_capacity{job="holos-api-gateway",deployment_environment_name="production"} > 0.9)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker thread pool has sustained waiting work"
+          description: "Inspect slow synchronous operations and traffic before adjusting concurrency. A larger pool can increase downstream load."
+      - alert: HolosTelemetryMissing
+        expr: >-
+          (time() - max by (job, deployment_environment_name) (holos:telemetry_last_seen:seconds{job="holos-api-gateway",deployment_environment_name="production"}) > 180) or absent_over_time(holos:telemetry_last_seen:seconds{job="holos-api-gateway",deployment_environment_name="production"}[3m])
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No production telemetry has arrived for three minutes"
+          description: "Check application availability, OTLP export errors, authentication, network access, and recording-rule health. This checks the service as a whole, not expected replica counts."
+      - alert: HolosExternalProbeFailed
+        expr: >-
+          probe_success{job="holos-gateway-production"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "External availability check is failing"
+          description: "With one-minute checks, investigate after three consecutive failed probes. Check DNS, TLS, ingress, and the application; this is independent of application telemetry."
+      - alert: HolosExternalProbeMissing
+        expr: >-
+          absent_over_time(probe_success{job="holos-gateway-production"}[3m])
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "External availability check results are missing"
+          description: "Confirm the independent HTTP check is configured and running. Missing probe data is distinct from a failed probe."

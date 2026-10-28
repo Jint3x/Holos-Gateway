@@ -26,6 +26,8 @@ from opentelemetry.sdk.trace import Event, ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.trace import SpanKind, Status
 
+from app.runtime_metrics import RuntimeMetrics
+
 METRIC_ATTRIBUTES = {
     "http.method",
     "http.request.method",
@@ -51,6 +53,7 @@ class TelemetrySettings:
     endpoint: str = field(default="", repr=False)
     headers: dict[str, str] = field(default_factory=dict, repr=False)
     log_level: str = "INFO"
+    metric_export_interval_ms: int = 30000
 
     @classmethod
     def from_env(cls):
@@ -105,11 +108,18 @@ class TelemetrySettings:
         level = os.getenv("LOG_LEVEL", "INFO").upper()
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("Invalid LOG_LEVEL")
+        try:
+            interval = int(os.getenv("OTEL_METRIC_EXPORT_INTERVAL", "30000"))
+        except ValueError:
+            raise ValueError("Invalid OTEL_METRIC_EXPORT_INTERVAL") from None
+        if not 1000 <= interval <= 60000:
+            raise ValueError("OTEL_METRIC_EXPORT_INTERVAL must be 1000-60000 ms")
         return cls(
             os.getenv("OTEL_SERVICE_NAME", "holos-api-gateway"),
             endpoint,
             headers,
             level,
+            interval,
         )
 
 
@@ -224,10 +234,12 @@ class Telemetry:
         resource = Resource.create(
             {
                 "service.name": settings.service_name,
-                "service.version": "0.1.0",
                 "service.instance.id": str(uuid4()),
             }
         )
+        resource = Resource(
+            {"service.version": "0.1.0", "deployment.environment.name": "development"}
+        ).merge(resource)
         self.traces = TracerProvider(resource=resource, shutdown_on_exit=False)
         readers = list(metric_readers or [])
         self.logs = LoggerProvider(resource=resource, shutdown_on_exit=False)
@@ -238,7 +250,7 @@ class Telemetry:
             readers.append(
                 PeriodicExportingMetricReader(
                     OTLPMetricExporter(endpoint=f"{base}/v1/metrics", **common),
-                    export_interval_millis=60000,
+                    export_interval_millis=settings.metric_export_interval_ms,
                     export_timeout_millis=5000,
                 )
             )
@@ -255,8 +267,15 @@ class Telemetry:
             resource=resource,
             metric_readers=readers,
             shutdown_on_exit=False,
-            views=[View(instrument_name="*", attribute_keys=METRIC_ATTRIBUTES)],
+            views=[
+                View(instrument_name="http.*", attribute_keys=METRIC_ATTRIBUTES),
+                View(instrument_name="holos.http.*", attribute_keys=METRIC_ATTRIBUTES),
+                View(instrument_name="process.*", attribute_keys={"cpu.mode"}),
+                View(instrument_name="holos.runtime.*", attribute_keys=set()),
+                View(instrument_name="holos.telemetry.*", attribute_keys=set()),
+            ],
         )
+        self.runtime = RuntimeMetrics(self.metrics.get_meter("holos.runtime"))
         self.errors = self.metrics.get_meter("holos.http").create_counter(
             "holos.http.server.errors",
             unit="{request}",
@@ -271,6 +290,13 @@ class Telemetry:
             app,
             tracer_provider=self.traces,
             meter_provider=self.metrics,
+            # These endpoints remain logged, but probes and interactive docs must
+            # not inflate user traffic, success rates, or latency distributions.
+            excluded_urls=(
+                r"^https?://[^/?#]+/"
+                r"(?:healthz|readyz|docs(?:/oauth2-redirect)?|redoc|openapi\.json)"
+                r"(?:\?.*)?$"
+            ),
             http_capture_headers_server_request=[],
             http_capture_headers_server_response=[],
             http_capture_headers_sanitize_fields=[".*"],

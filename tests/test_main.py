@@ -57,10 +57,28 @@ def test_maximum_length_name_is_accepted(client) -> None:
     assert response.json() == {"message": "Hello " + "a" * 80}
 
 
+def test_health_and_readiness_follow_worker_lifecycle():
+    app = create_app(telemetry=Telemetry(TelemetrySettings()))
+    assert app.state.ready is False
+    with TestClient(app) as client:
+        for path, status in [("/healthz", "ok"), ("/readyz", "ready")]:
+            response = client.get(path)
+            assert response.status_code == 200
+            assert response.json() == {"status": status}
+        app.state.ready = False
+        response = client.get("/readyz")
+        assert response.status_code == 503
+        assert response.json() == {"status": "not_ready"}
+        assert client.get("/healthz").status_code == 200
+    assert app.state.ready is False
+
+
 def test_openapi_matches_exported_schema(client) -> None:
     response = client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    assert set(schema["paths"]["/readyz"]["get"]["responses"]) == {"200", "503"}
+    assert set(schema["paths"]["/healthz"]["get"]["responses"]) == {"200"}
     exported = Path(__file__).resolve().parents[1] / "docs" / "openapi.json"
     assert schema == json.loads(exported.read_text(encoding="utf-8"))
     responses = schema["paths"]["/"]["get"]["responses"]
