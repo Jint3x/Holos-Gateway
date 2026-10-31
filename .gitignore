@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 .env
+.env.*
+!.env.example
+.ruff_cache/

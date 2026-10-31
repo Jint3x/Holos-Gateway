@@ -57,6 +57,18 @@ uv run --locked uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
 Use the factory entry point so each worker owns its providers. Do not also wrap
 this command in `opentelemetry-instrument`: telemetry is initialized explicitly.
 The lifespan handler installs logging and drains/shuts down providers on exit.
+The Docker images use the same factory command through `scripts/start.sh`;
+development adds `--reload`. Compose forwards the supported telemetry variables
+from the current shell. Production `docker run` examples in the README forward
+the endpoint and auth by variable name. Both paths require at least a 30-second
+stop grace period so the lifespan shutdown can drain the exporters.
+
+The image health check calls the existing `GET /` endpoint. It measures local
+API health and does not depend on Grafana availability. To use a separate
+collector container, supply an HTTPS endpoint with trusted certificates; plain
+`http://collector:4318` is rejected by the existing loopback-only HTTP policy.
+For a local session without remote export, set `OTEL_SDK_DISABLED=true`.
+
 `--no-access-log` disables Uvicorn's duplicate raw access log, which can contain
 query strings. Infrastructure/reverse-proxy access logs need their own equivalent
 privacy configuration. Uvicorn's own diagnostic logs are separate from the
