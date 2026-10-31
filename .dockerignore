@@ -1,0 +1,14 @@
+# Only repository inputs used by the image are sent to the builder.
+**
+!pyproject.toml
+!uv.lock
+!.python-version
+!app/
+!app/**/*.py
+!scripts/
+!scripts/*.py
+!scripts/start.sh
+!tests/
+!tests/**/*.py
+!docs/
+!docs/openapi.json
